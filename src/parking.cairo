@@ -61,6 +61,11 @@ pub trait IParking<TContractState> {
         payment_token: ContractAddress
     );
 
+    // Impose a penalty on a license plate for invalid parking
+    fn impose_penalty(
+        ref self: TContractState, license_plate: felt252, lot_id: u256, amount_usd_cents: u64
+    );
+
     // Get a valid payment token
     fn get_payment_token(self: @TContractState) -> ContractAddress;
 
@@ -72,6 +77,9 @@ pub trait IParking<TContractState> {
 
     // Validate if the vehicle license plate is valid for the given lot
     fn validate_license_plate(self: @TContractState, lot_id: u256, license_plate: felt252) -> bool;
+
+    // Check for outstanding penalties for a license plate
+    fn has_outstanding_penalty(self: @TContractState, license_plate: felt252) -> bool;
 }
 
 #[starknet::contract]
@@ -88,7 +96,8 @@ pub mod Parking {
         bookings: Map::<felt252, Booking>, // Mapping from booking_id to Booking
         available_slots: Map::<u256, u32>, // Mapping from lot_id to available slots
         payment_token: ContractAddress, // TODO: remove it
-        license_plate_to_booking: Map::<felt252, felt252> // License_plate to booking_id
+        license_plate_to_booking: Map::<felt252, felt252>, // License_plate to booking_id
+        penalties: Map::<felt252, u64> // Mapping from license_plate to penalty_amount
     }
 
     #[constructor]
@@ -103,7 +112,8 @@ pub mod Parking {
         ParkingLotRegistered: ParkingLotRegistered,
         ParkingBooked: ParkingBooked,
         ParkingExtended: ParkingExtended,
-        ParkingEnded: ParkingEnded
+        ParkingEnded: ParkingEnded,
+        PenaltyImposed: PenaltyImposed
     }
 
     // Event for registering a parking lot
@@ -135,6 +145,15 @@ pub mod Parking {
         booking_id: felt252,
         exit_time: u64,
         total_payment: u64
+    }
+
+    // Event for imposing a penalty
+    #[derive(Drop, starknet::Event)]
+    struct PenaltyImposed {
+        license_plate: felt252,
+        lot_id: u256,
+        penalty_amount: u64,
+        timestamp: u64,
     }
 
     #[abi(embed_v0)]
@@ -184,7 +203,7 @@ pub mod Parking {
             assert(self.payment_token.read() == payment_token, 'Invalid token');
             assert(duration > 0, 'Duration must be non-zero');
             let existing_parking_lot = self.parking_lots.read(lot_id);
-            assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exists');
+            assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exist');
             let available_slot = self.available_slots.read(lot_id);
             assert(available_slot > 0, 'Full slot');
 
@@ -217,7 +236,7 @@ pub mod Parking {
         // End a parking session
         fn end_parking(ref self: ContractState, booking_id: felt252) {
             let booking = self.bookings.read(booking_id);
-            assert(booking.booking_id == booking_id, 'Booking id does not exists');
+            assert(booking.booking_id == booking_id, 'Booking id does not exist');
             let caller = get_caller_address();
             assert(booking.payer == caller, 'Not driver owner');
             // TODO: add pay if over time
@@ -245,12 +264,12 @@ pub mod Parking {
         ) {
             assert(additional_hours > 0, 'Duration must be non-zero');
             let booking = self.bookings.read(booking_id);
-            assert(booking.booking_id == booking_id, 'Booking id does not exists');
+            assert(booking.booking_id == booking_id, 'Booking ID does not exist');
             assert(self.payment_token.read() == payment_token, 'Invalid token');
             let caller = get_caller_address();
             assert(booking.payer == caller, 'Not driver owner');
             let existing_parking_lot = self.parking_lots.read(booking.lot_id);
-            assert(existing_parking_lot.lot_id == booking.lot_id, 'Parking lot does not exists');
+            assert(existing_parking_lot.lot_id == booking.lot_id, 'Parking lot does not exist');
 
             let price = 100000000000000000; // TODO: remove mock STRK amount
             let amount = price * additional_hours.into();
@@ -272,6 +291,24 @@ pub mod Parking {
             };
             self.bookings.write(booking_id, extend_booking);
             erc20.transferFrom(payer, existing_parking_lot.wallet_address, amount.into());
+        }
+
+        // Impose a penalty on a license plate for invalid parking
+        fn impose_penalty(
+            ref self: ContractState, license_plate: felt252, lot_id: u256, amount_usd_cents: u64
+        ) {
+            let existing_parking_lot = self.parking_lots.read(lot_id);
+            assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exist');
+            let caller = get_caller_address();
+            assert(existing_parking_lot.creator == caller, 'Not parking lot creator');
+            let timestamp = get_block_timestamp();
+            self.penalties.write(license_plate, amount_usd_cents);
+            self
+                .emit(
+                    PenaltyImposed {
+                        license_plate, lot_id, penalty_amount: amount_usd_cents, timestamp
+                    }
+                );
         }
 
         // Get a valid payment token
@@ -305,6 +342,15 @@ pub mod Parking {
                         false
                     }
                 }
+            }
+        }
+
+        // Check for outstanding penalties for a license plate
+        fn has_outstanding_penalty(self: @ContractState, license_plate: felt252) -> bool {
+            let penalty = self.penalties.read(license_plate);
+            match penalty {
+                0 => false,
+                _ => true
             }
         }
     }

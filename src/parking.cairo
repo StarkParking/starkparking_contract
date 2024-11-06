@@ -97,6 +97,46 @@ pub mod Parking {
         self.payment_token.write(payment_token); // TODO: remove it
     }
 
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    pub enum Event {
+        ParkingLotRegistered: ParkingLotRegistered,
+        ParkingBooked: ParkingBooked,
+        ParkingExtended: ParkingExtended,
+        ParkingEnded: ParkingEnded
+    }
+
+    // Event for registering a parking lot
+    #[derive(Drop, Serde, starknet::Event)]
+    struct ParkingLotRegistered {
+        lot_id: u256,
+    }
+
+    // Event for booking a parking spot
+    #[derive(Drop, starknet::Event)]
+    struct ParkingBooked {
+        booking_id: felt252,
+        lot_id: u256,
+        entry_time: u64,
+        license_plate: felt252,
+        duration: u32
+    }
+
+    // Event for extending a parking booking
+    #[derive(Drop, starknet::Event)]
+    struct ParkingExtended {
+        booking_id: felt252,
+        additional_hours: u32,
+    }
+
+    // Event for ending a parking session
+    #[derive(Drop, starknet::Event)]
+    struct ParkingEnded {
+        booking_id: felt252,
+        exit_time: u64,
+        total_payment: u64
+    }
+
     #[abi(embed_v0)]
     impl ParkingImpl of super::IParking<ContractState> {
         fn register_parking_lot(
@@ -130,6 +170,7 @@ pub mod Parking {
             };
             self.parking_lots.write(lot_id, new_parking_lot);
             self.available_slots.write(lot_id, slot_count);
+            self.emit(ParkingLotRegistered { lot_id });
         }
 
         fn book_parking(
@@ -170,6 +211,7 @@ pub mod Parking {
             self.available_slots.write(lot_id, available_slot - 1);
             self.license_plate_to_booking.write(license_plate, booking_id);
             erc20.transferFrom(payer, existing_parking_lot.wallet_address, amount.into());
+            self.emit(ParkingBooked { booking_id, lot_id, entry_time, license_plate, duration });
         }
 
         // End a parking session
@@ -191,6 +233,7 @@ pub mod Parking {
                 payer: caller,
             };
             self.bookings.write(booking_id, end_booking);
+            self.emit(ParkingEnded { booking_id, exit_time, total_payment: booking.total_payment });
         }
 
         // Extend a parking session

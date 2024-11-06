@@ -202,7 +202,19 @@ pub mod Parking {
         fn validate_license_plate(
             self: @ContractState, lot_id: u256, license_plate: felt252
         ) -> bool {
-            true // TODO: remove it
+            let existing_license_plate = self.license_plate_to_booking.read(license_plate);
+            match existing_license_plate {
+                0 => false,
+                _ => {
+                    let block_time = get_block_timestamp();
+                    let booking = self.bookings.read(existing_license_plate);
+                    if (booking.expiration_time > block_time && booking.lot_id == lot_id) {
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
         }
     }
 }

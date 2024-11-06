@@ -199,7 +199,37 @@ pub mod Parking {
             booking_id: felt252,
             additional_hours: u32,
             payment_token: ContractAddress
-        ) {}
+        ) {
+            assert(additional_hours > 0, 'Duration must be non-zero');
+            let booking = self.bookings.read(booking_id);
+            assert(booking.booking_id == booking_id, 'Booking id does not exists');
+            assert(self.payment_token.read() == payment_token, 'Invalid token');
+            let caller = get_caller_address();
+            assert(booking.payer == caller, 'Not driver owner');
+            let existing_parking_lot = self.parking_lots.read(booking.lot_id);
+            assert(existing_parking_lot.lot_id == booking.lot_id, 'Parking lot does not exists');
+
+            let price = 100000000000000000; // TODO: remove mock STRK amount
+            let amount = price * additional_hours.into();
+            let expiration_time = booking.expiration_time + (3600 * additional_hours.into());
+            let payer = get_caller_address();
+            let erc20 = IERC20Dispatcher { contract_address: payment_token };
+            let total_payment: u64 = booking.total_payment
+                + (existing_parking_lot.hourly_rate_usd_cents * additional_hours).into();
+
+            let extend_booking = Booking {
+                license_plate: booking.license_plate,
+                booking_id: booking.booking_id,
+                lot_id: booking.lot_id,
+                entry_time: booking.entry_time,
+                exit_time: 0,
+                expiration_time,
+                total_payment,
+                payer
+            };
+            self.bookings.write(booking_id, extend_booking);
+            erc20.transferFrom(payer, existing_parking_lot.wallet_address, amount.into());
+        }
 
         // Get a valid payment token
         fn get_payment_token(self: @ContractState) -> ContractAddress {

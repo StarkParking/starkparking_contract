@@ -1,47 +1,33 @@
-use starknet::ContractAddress;
+use starknet::{ContractAddress, contract_address_const};
 
 use snforge_std::{declare, ContractClassTrait, DeclareResultTrait};
 
-use starkparking_contract::IHelloStarknetSafeDispatcher;
-use starkparking_contract::IHelloStarknetSafeDispatcherTrait;
-use starkparking_contract::IHelloStarknetDispatcher;
-use starkparking_contract::IHelloStarknetDispatcherTrait;
+use starkparking_contract::parking::{
+    IParkingDispatcher,
+    IParkingDispatcherTrait, // IParkingSafeDispatcher, IParkingSafeDispatcherTrait
+};
 
-fn deploy_contract(name: ByteArray) -> ContractAddress {
-    let contract = declare(name).unwrap().contract_class();
-    let (contract_address, _) = contract.deploy(@ArrayTrait::new()).unwrap();
+fn _default_owner() -> ContractAddress {
+    contract_address_const::<0xdeadbeefdeadbeef>()
+}
+
+fn default_payment_token() -> ContractAddress {
+    contract_address_const::<0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d>()
+}
+
+fn deploy_contract() -> ContractAddress {
+    let contract = declare("Parking").unwrap().contract_class();
+    // let (contract_address, _) = contract.deploy(@ArrayTrait::new()).unwrap();
+    let (contract_address, _) = contract
+        .deploy(@array![default_payment_token().into()])
+        .expect('Deploy failed');
     contract_address
 }
 
 #[test]
-fn test_increase_balance() {
-    let contract_address = deploy_contract("HelloStarknet");
-
-    let dispatcher = IHelloStarknetDispatcher { contract_address };
-
-    let balance_before = dispatcher.get_balance();
-    assert(balance_before == 0, 'Invalid balance');
-
-    dispatcher.increase_balance(42);
-
-    let balance_after = dispatcher.get_balance();
-    assert(balance_after == 42, 'Invalid balance');
-}
-
-#[test]
-#[feature("safe_dispatcher")]
-fn test_cannot_increase_balance_with_zero_value() {
-    let contract_address = deploy_contract("HelloStarknet");
-
-    let safe_dispatcher = IHelloStarknetSafeDispatcher { contract_address };
-
-    let balance_before = safe_dispatcher.get_balance().unwrap();
-    assert(balance_before == 0, 'Invalid balance');
-
-    match safe_dispatcher.increase_balance(0) {
-        Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
-        Result::Err(panic_data) => {
-            assert(*panic_data.at(0) == 'Amount cannot be 0', *panic_data.at(0));
-        }
-    };
+fn test_contructor() {
+    let contract_address = deploy_contract();
+    let dispatcher = IParkingDispatcher { contract_address };
+    let payment_token = dispatcher.get_payment_token();
+    assert(payment_token == default_payment_token().into(), 'Invalid payment token');
 }

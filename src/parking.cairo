@@ -163,7 +163,7 @@ pub mod Parking {
 
         // Get available slots in a parking lot
         fn get_available_slots(self: @ContractState, lot_id: u256) -> u32 {
-            30 // TODO: remove it
+            self.available_slots.read(lot_id)
         }
 
         // Validate if the vehicle license plate is valid for the given lot

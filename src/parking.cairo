@@ -80,6 +80,7 @@ pub mod Parking {
     use super::{ParkingLot, Booking};
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
     use starknet::storage::{Map, StoragePointerWriteAccess,};
+    use starkparking_contract::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
 
     #[storage]
     struct Storage {
@@ -138,7 +139,38 @@ pub mod Parking {
             payment_token: ContractAddress,
             license_plate: felt252,
             duration: u32, // Duration in hours
-        ) {}
+        ) {
+            assert(self.payment_token.read() == payment_token, 'Invalid token');
+            assert(duration > 0, 'Duration must be non-zero');
+            let existing_parking_lot = self.parking_lots.read(lot_id);
+            assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exists');
+            let available_slot = self.available_slots.read(lot_id);
+            assert(available_slot > 0, 'Full slot');
+
+            let price: u256 = 100000000000000000; // TODO: remove mock STRK amount
+            let amount = price * duration.into();
+            let entry_time = get_block_timestamp();
+            let expiration_time = entry_time + (3600 * duration.into());
+            let payer = get_caller_address();
+            let erc20 = IERC20Dispatcher { contract_address: payment_token };
+            let total_payment: u64 = (existing_parking_lot.hourly_rate_usd_cents * duration).into();
+
+            let booking = Booking {
+                license_plate,
+                booking_id,
+                lot_id,
+                entry_time,
+                exit_time: 0,
+                expiration_time,
+                total_payment,
+                payer
+            };
+
+            self.bookings.write(booking_id, booking);
+            self.available_slots.write(lot_id, available_slot - 1);
+            self.license_plate_to_booking.write(license_plate, booking_id);
+            erc20.transferFrom(payer, existing_parking_lot.wallet_address, amount.into());
+        }
 
         // End a parking session
         fn end_parking(ref self: ContractState, booking_id: felt252) {}

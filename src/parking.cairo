@@ -173,7 +173,25 @@ pub mod Parking {
         }
 
         // End a parking session
-        fn end_parking(ref self: ContractState, booking_id: felt252) {}
+        fn end_parking(ref self: ContractState, booking_id: felt252) {
+            let booking = self.bookings.read(booking_id);
+            assert(booking.booking_id == booking_id, 'Booking id does not exists');
+            let caller = get_caller_address();
+            assert(booking.payer == caller, 'Not driver owner');
+            // TODO: add pay if over time
+            let exit_time = get_block_timestamp();
+            let end_booking = Booking {
+                license_plate: booking.license_plate,
+                booking_id: booking.booking_id,
+                lot_id: booking.lot_id,
+                entry_time: booking.entry_time,
+                exit_time,
+                expiration_time: booking.expiration_time,
+                total_payment: booking.total_payment,
+                payer: caller,
+            };
+            self.bookings.write(booking_id, end_booking);
+        }
 
         // Extend a parking session
         fn extend_parking(

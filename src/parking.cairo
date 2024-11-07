@@ -80,6 +80,9 @@ pub trait IParking<TContractState> {
 
     // Check for outstanding penalties for a license plate
     fn has_outstanding_penalty(self: @TContractState, license_plate: felt252) -> bool;
+
+    // Get O
+    fn get_asset_price(self: @TContractState, asset_id: felt252) -> u128;
 }
 
 #[starknet::contract]
@@ -93,6 +96,9 @@ pub mod Parking {
     // Openzeppelin
     use openzeppelin::security::PausableComponent;
     use openzeppelin::access::ownable::OwnableComponent;
+
+    use pragma_lib::abi::{IPragmaABIDispatcher, IPragmaABIDispatcherTrait};
+    use pragma_lib::types::{DataType, PragmaPricesResponse};
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: PausableComponent, storage: pausable, event: PausableEvent);
@@ -111,6 +117,7 @@ pub mod Parking {
         ownable: OwnableComponent::Storage,
         #[substorage(v0)]
         pausable: PausableComponent::Storage,
+        pragma_contract: ContractAddress, // Pragma Contract Address
         parking_lots: Map::<u256, ParkingLot>, // Mapping from lot_id to ParkingLot
         bookings: Map::<felt252, Booking>, // Mapping from booking_id to Booking
         available_slots: Map::<u256, u32>, // Mapping from lot_id to available slots
@@ -121,11 +128,16 @@ pub mod Parking {
 
     #[constructor]
     fn constructor(
-        ref self: ContractState, owner: ContractAddress, payment_token: ContractAddress
+        ref self: ContractState,
+        owner: ContractAddress,
+        pragma_contract: ContractAddress,
+        payment_token: ContractAddress
     ) {
         assert(Zero::is_non_zero(@owner), 'Owner address zero');
+        assert(Zero::is_non_zero(@pragma_contract), 'Pragma contract address zero');
         assert(Zero::is_non_zero(@payment_token), 'Payment token address zero');
         self.ownable.initializer(owner);
+        self.pragma_contract.write(pragma_contract);
         self.payment_token.write(payment_token); // TODO: remove it
     }
 
@@ -396,6 +408,20 @@ pub mod Parking {
                 0 => false,
                 _ => true
             }
+        }
+
+        // Retrieve the oracle
+        fn get_asset_price(self: @ContractState, asset_id: felt252) -> u128 {
+            // Retrieve the oracle dispatcher
+            let oracle_dispatcher = IPragmaABIDispatcher {
+                contract_address: self.pragma_contract.read()
+            };
+
+            // Call the Oracle contract, for a spot entry
+            let output: PragmaPricesResponse = oracle_dispatcher
+                .get_data_median(DataType::SpotEntry(asset_id));
+
+            output.price
         }
     }
 }

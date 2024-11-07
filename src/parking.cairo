@@ -273,8 +273,8 @@ pub mod Parking {
             let available_slot = self.available_slots.read(lot_id);
             assert(available_slot > 0, 'Full slot');
 
-            let price: u256 = 100000000000000000; // TODO: remove mock STRK amount
-            let amount = price * duration.into();
+            let amount = self.get_oracle_token_quote(lot_id, payment_token, duration)
+                * duration.into();
             let entry_time = get_block_timestamp();
             let expiration_time = entry_time + (3600 * duration.into());
             let payer = get_caller_address();
@@ -339,8 +339,11 @@ pub mod Parking {
             let existing_parking_lot = self.parking_lots.read(booking.lot_id);
             assert(existing_parking_lot.lot_id == booking.lot_id, 'Parking lot does not exist');
 
-            let price = 100000000000000000; // TODO: remove mock STRK amount
-            let amount = price * additional_hours.into();
+            let amount = self
+                .get_oracle_token_quote(
+                    existing_parking_lot.lot_id, payment_token, additional_hours
+                )
+                * additional_hours.into();
             let expiration_time = booking.expiration_time + (3600 * additional_hours.into());
             let payer = get_caller_address();
             let erc20 = IERC20Dispatcher { contract_address: payment_token };

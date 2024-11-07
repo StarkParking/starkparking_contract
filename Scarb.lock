@@ -2,6 +2,11 @@
 version = 1
 
 [[package]]
+name = "alexandria_math"
+version = "0.2.1"
+source = "git+https://github.com/keep-starknet-strange/alexandria.git#95d98a5182001d07673b856a356eff0e6bd05354"
+
+[[package]]
 name = "openzeppelin"
 version = "0.18.0"
 source = "git+https://github.com/OpenZeppelin/cairo-contracts.git?tag=v0.18.0#2f37306b490e63c0afa9e33ad192ba428141b487"
@@ -128,6 +133,7 @@ dependencies = [
 name = "starkparking_contract"
 version = "0.1.0"
 dependencies = [
+ "alexandria_math",
  "openzeppelin",
  "pragma_lib",
  "snforge_std",

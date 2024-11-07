@@ -81,7 +81,16 @@ pub trait IParking<TContractState> {
     // Check for outstanding penalties for a license plate
     fn has_outstanding_penalty(self: @TContractState, license_plate: felt252) -> bool;
 
-    // Get O
+    // Retrieves the estimated token amount for a parking spot based on the lot ID and duration
+    // using an oracle.
+    fn get_oracle_token_quote(
+        self: @TContractState,
+        lot_id: u256,
+        payment_token: ContractAddress,
+        duration: u32, // Duration in hours
+    ) -> u256;
+
+    // Get asset price using Pragma
     fn get_asset_price(self: @TContractState, asset_id: felt252) -> u128;
 }
 
@@ -93,12 +102,16 @@ pub mod Parking {
     use starknet::storage::{Map, StoragePointerWriteAccess,};
     use starkparking_contract::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
 
-    // Openzeppelin
+    // Openzeppelin Lib
     use openzeppelin::security::PausableComponent;
     use openzeppelin::access::ownable::OwnableComponent;
 
+    // Pragma Lib
     use pragma_lib::abi::{IPragmaABIDispatcher, IPragmaABIDispatcherTrait};
     use pragma_lib::types::{DataType, PragmaPricesResponse};
+
+    // Alexandria math
+    use alexandria_math::const_pow::{pow10_u256};
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: PausableComponent, storage: pausable, event: PausableEvent);
@@ -408,6 +421,35 @@ pub mod Parking {
                 0 => false,
                 _ => true
             }
+        }
+
+        // Retrieves the estimated token amount for a parking spot based on the lot ID and duration
+        // using an oracle.
+        fn get_oracle_token_quote(
+            self: @ContractState,
+            lot_id: u256,
+            payment_token: ContractAddress,
+            duration: u32, // Duration in hours
+        ) -> u256 {
+            assert(payment_token == self.payment_token.read(), 'Invalid token');
+            assert(duration > 0, 'Duration must be non-zero');
+
+            let existing_parking_lot = self.parking_lots.read(lot_id);
+            assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exists');
+            let available_slot = self.available_slots.read(lot_id);
+            assert(available_slot > 0, 'Full slot');
+
+            // Get asset price
+            let token_price = self.get_asset_price(6004514686061859652).into();
+
+            // Calculate the amount of token needed
+            let token_needed = (existing_parking_lot.hourly_rate_usd_cents.into()
+                * pow10_u256(8)
+                * pow10_u256(18))
+                / (token_price * 100);
+
+            let amount: u256 = token_needed * duration.into();
+            amount
         }
 
         // Retrieve the oracle

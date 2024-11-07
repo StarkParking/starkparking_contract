@@ -270,6 +270,7 @@ pub mod Parking {
             assert(duration > 0, 'Duration must be non-zero');
             let existing_parking_lot = self.parking_lots.read(lot_id);
             assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exist');
+            assert(self.has_outstanding_penalty(license_plate) == false, 'License plate is penalized');
             let available_slot = self.available_slots.read(lot_id);
             assert(available_slot > 0, 'Full slot');
 

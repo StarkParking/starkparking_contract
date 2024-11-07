@@ -90,8 +90,27 @@ pub mod Parking {
     use starknet::storage::{Map, StoragePointerWriteAccess,};
     use starkparking_contract::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
 
+    // Openzeppelin
+    use openzeppelin::security::PausableComponent;
+    use openzeppelin::access::ownable::OwnableComponent;
+
+    component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+    component!(path: PausableComponent, storage: pausable, event: PausableEvent);
+
+    #[abi(embed_v0)]
+    impl PausableImpl = PausableComponent::PausableImpl<ContractState>;
+    impl PausableInternalImpl = PausableComponent::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
+    impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
+
     #[storage]
     struct Storage {
+        #[substorage(v0)]
+        ownable: OwnableComponent::Storage,
+        #[substorage(v0)]
+        pausable: PausableComponent::Storage,
         parking_lots: Map::<u256, ParkingLot>, // Mapping from lot_id to ParkingLot
         bookings: Map::<felt252, Booking>, // Mapping from booking_id to Booking
         available_slots: Map::<u256, u32>, // Mapping from lot_id to available slots
@@ -101,14 +120,22 @@ pub mod Parking {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, payment_token: ContractAddress) {
+    fn constructor(
+        ref self: ContractState, owner: ContractAddress, payment_token: ContractAddress
+    ) {
+        assert(Zero::is_non_zero(@owner), 'Owner address zero');
         assert(Zero::is_non_zero(@payment_token), 'Payment token address zero');
+        self.ownable.initializer(owner);
         self.payment_token.write(payment_token); // TODO: remove it
     }
 
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
+        #[flat]
+        OwnableEvent: OwnableComponent::Event,
+        #[flat]
+        PausableEvent: PausableComponent::Event,
         ParkingLotRegistered: ParkingLotRegistered,
         ParkingBooked: ParkingBooked,
         ParkingExtended: ParkingExtended,
@@ -156,6 +183,18 @@ pub mod Parking {
         timestamp: u64,
     }
 
+    #[external(v0)]
+    fn pause(ref self: ContractState) {
+        self.ownable.assert_only_owner();
+        self.pausable.pause();
+    }
+
+    #[external(v0)]
+    fn unpause(ref self: ContractState) {
+        self.ownable.assert_only_owner();
+        self.pausable.unpause();
+    }
+
     #[abi(embed_v0)]
     impl ParkingImpl of super::IParking<ContractState> {
         fn register_parking_lot(
@@ -168,6 +207,7 @@ pub mod Parking {
             hourly_rate_usd_cents: u32,
             wallet_address: ContractAddress
         ) {
+            self.pausable.assert_not_paused();
             let existing_parking_lot = self.parking_lots.read(lot_id);
             assert(existing_parking_lot.lot_id != lot_id, 'lot_id already exists');
             assert(Zero::is_non_zero(@wallet_address), 'Wallet address zero');
@@ -200,6 +240,7 @@ pub mod Parking {
             license_plate: felt252,
             duration: u32, // Duration in hours
         ) {
+            self.pausable.assert_not_paused();
             assert(self.payment_token.read() == payment_token, 'Invalid token');
             assert(duration > 0, 'Duration must be non-zero');
             let existing_parking_lot = self.parking_lots.read(lot_id);
@@ -235,6 +276,7 @@ pub mod Parking {
 
         // End a parking session
         fn end_parking(ref self: ContractState, booking_id: felt252) {
+            self.pausable.assert_not_paused();
             let booking = self.bookings.read(booking_id);
             assert(booking.booking_id == booking_id, 'Booking id does not exist');
             let caller = get_caller_address();
@@ -262,6 +304,7 @@ pub mod Parking {
             additional_hours: u32,
             payment_token: ContractAddress
         ) {
+            self.pausable.assert_not_paused();
             assert(additional_hours > 0, 'Duration must be non-zero');
             let booking = self.bookings.read(booking_id);
             assert(booking.booking_id == booking_id, 'Booking ID does not exist');
@@ -297,6 +340,7 @@ pub mod Parking {
         fn impose_penalty(
             ref self: ContractState, license_plate: felt252, lot_id: u256, amount_usd_cents: u64
         ) {
+            self.pausable.assert_not_paused();
             let existing_parking_lot = self.parking_lots.read(lot_id);
             assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exist');
             let caller = get_caller_address();

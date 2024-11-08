@@ -2,28 +2,28 @@ use starknet::ContractAddress;
 
 #[derive(Drop, Clone, Serde, starknet::Store)]
 pub struct ParkingLot {
-    lot_id: u256,
-    name: felt252,
-    location: felt252,
-    coordinates: felt252,
-    slot_count: u32,
-    hourly_rate_usd_cents: u32,
-    creator: ContractAddress,
-    wallet_address: ContractAddress,
-    is_active: bool,
-    registration_time: u64
+    pub lot_id: u256,
+    pub name: felt252,
+    pub location: felt252,
+    pub coordinates: felt252,
+    pub slot_count: u32,
+    pub hourly_rate_usd_cents: u32,
+    pub creator: ContractAddress,
+    pub wallet_address: ContractAddress,
+    pub is_active: bool,
+    pub registration_time: u64
 }
 
 #[derive(Copy, Drop, Serde, starknet::Store)]
 pub struct Booking {
-    license_plate: felt252, // Vehicle license plate number
-    booking_id: felt252, // Unique identifier for the booking
-    lot_id: u256, // Associated parking lot
-    entry_time: u64, // Timestamp of entry
-    exit_time: u64, // Timestamp of exit
-    expiration_time: u64, // Timestamp indicating when the booking expires
-    total_payment: u64, // Total payment amount in cents
-    payer: ContractAddress // Wallet address of the user
+    pub license_plate: felt252, // Vehicle license plate number
+    pub booking_id: felt252, // Unique identifier for the booking
+    pub lot_id: u256, // Associated parking lot
+    pub entry_time: u64, // Timestamp of entry
+    pub exit_time: u64, // Timestamp of exit
+    pub expiration_time: u64, // Timestamp indicating when the booking expires
+    pub total_payment: u64, // Total payment amount in cents
+    pub payer: ContractAddress // Wallet address of the user
 }
 
 #[starknet::interface]
@@ -65,6 +65,9 @@ pub trait IParking<TContractState> {
     fn impose_penalty(
         ref self: TContractState, license_plate: felt252, lot_id: u256, amount_usd_cents: u64
     );
+
+    // Retrieves the total number of parking lots registered
+    fn get_total_parking_lots(self: @TContractState) -> u32;
 
     // Get a valid payment token
     fn get_payment_token(self: @TContractState) -> ContractAddress;
@@ -134,9 +137,10 @@ pub mod Parking {
         parking_lots: Map::<u256, ParkingLot>, // Mapping from lot_id to ParkingLot
         bookings: Map::<felt252, Booking>, // Mapping from booking_id to Booking
         available_slots: Map::<u256, u32>, // Mapping from lot_id to available slots
-        payment_token: ContractAddress, // TODO: remove it
         license_plate_to_booking: Map::<felt252, felt252>, // License_plate to booking_id
-        penalties: Map::<felt252, u64> // Mapping from license_plate to penalty_amount
+        penalties: Map::<felt252, u64>, // Mapping from license_plate to penalty_amount
+        payment_token: ContractAddress, // TODO: remove it
+        total_parking_lots: u32 // Count of total parking lots
     }
 
     #[constructor]
@@ -150,6 +154,7 @@ pub mod Parking {
         assert(Zero::is_non_zero(@pragma_contract), 'Pragma contract address zero');
         assert(Zero::is_non_zero(@payment_token), 'Payment token address zero');
         self.ownable.initializer(owner);
+        self.total_parking_lots.write(0);
         self.pragma_contract.write(pragma_contract);
         self.payment_token.write(payment_token); // TODO: remove it
     }
@@ -240,6 +245,7 @@ pub mod Parking {
             assert(hourly_rate_usd_cents > 0, 'Price must be non-zero');
             let creator = get_caller_address();
             let registration_time = get_block_timestamp();
+            let total_parking_lots = self.get_total_parking_lots();
             let new_parking_lot = ParkingLot {
                 lot_id,
                 name,
@@ -253,6 +259,7 @@ pub mod Parking {
                 registration_time
             };
             self.parking_lots.write(lot_id, new_parking_lot);
+            self.total_parking_lots.write(total_parking_lots + 1);
             self.available_slots.write(lot_id, slot_count);
             self.emit(ParkingLotRegistered { lot_id });
         }
@@ -385,6 +392,11 @@ pub mod Parking {
                         license_plate, lot_id, penalty_amount: amount_usd_cents, timestamp
                     }
                 );
+        }
+
+        // Retrieves the total number of parking lots registered
+        fn get_total_parking_lots(self: @ContractState) -> u32 {
+            self.total_parking_lots.read()
         }
 
         // Get a valid payment token

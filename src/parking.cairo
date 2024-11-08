@@ -26,6 +26,14 @@ pub struct Booking {
     pub payer: ContractAddress // Wallet address of the user
 }
 
+#[derive(Drop, Serde, starknet::Store)]
+pub struct Pair {
+    token_address: ContractAddress,
+    pair_id: felt252,
+    pair_decimals: u8,
+    token_decimals: u8
+}
+
 #[starknet::interface]
 pub trait IParking<TContractState> {
     // Register a new parking lot
@@ -65,11 +73,20 @@ pub trait IParking<TContractState> {
         ref self: TContractState, license_plate: felt252, lot_id: u256, amount_usd_cents: u64
     );
 
+    // Add a new supported payment token
+    fn add_supported_token(
+        ref self: TContractState,
+        payment_token: ContractAddress,
+        pair_id: felt252,
+        pair_decimals: u8,
+        token_decimals: u8
+    );
+
     // Retrieves the total number of parking lots registered
     fn get_total_parking_lots(self: @TContractState) -> u256;
 
-    // Get a valid payment token
-    fn get_payment_token(self: @TContractState) -> ContractAddress;
+    // Checks if the given payment token is valid
+    fn is_supported_payment_token(self: @TContractState, payment_token: ContractAddress) -> Pair;
 
     // Get parking lot by lot_id
     fn get_parking_lot(self: @TContractState, lot_id: u256) -> ParkingLot;
@@ -100,7 +117,7 @@ pub trait IParking<TContractState> {
 pub mod Parking {
     use super::IParking;
     use core::num::traits::Zero;
-    use super::{ParkingLot, Booking};
+    use super::{ParkingLot, Booking, Pair};
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
     use starknet::storage::{Map, StoragePointerWriteAccess,};
     use starkparking_contract::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
@@ -139,24 +156,19 @@ pub mod Parking {
         available_slots: Map::<u256, u32>, // Mapping from lot_id to available slots
         license_plate_to_booking: Map::<felt252, felt252>, // License_plate to booking_id
         penalties: Map::<felt252, u64>, // Mapping from license_plate to penalty_amount
-        payment_token: ContractAddress, // TODO: remove it
+        payment_tokens: Map::<ContractAddress, Pair>,
         total_parking_lots: u256 // Count of total parking lots
     }
 
     #[constructor]
     fn constructor(
-        ref self: ContractState,
-        owner: ContractAddress,
-        pragma_contract: ContractAddress,
-        payment_token: ContractAddress
+        ref self: ContractState, owner: ContractAddress, pragma_contract: ContractAddress
     ) {
         assert(Zero::is_non_zero(@owner), 'Owner address zero');
         assert(Zero::is_non_zero(@pragma_contract), 'Pragma contract address zero');
-        assert(Zero::is_non_zero(@payment_token), 'Payment token address zero');
         self.ownable.initializer(owner);
         self.total_parking_lots.write(0);
         self.pragma_contract.write(pragma_contract);
-        self.payment_token.write(payment_token); // TODO: remove it
     }
 
     #[event]
@@ -271,7 +283,10 @@ pub mod Parking {
             duration: u32, // Duration in hours
         ) {
             self.pausable.assert_not_paused();
-            assert(self.payment_token.read() == payment_token, 'Invalid token');
+            assert(
+                self.is_supported_payment_token(payment_token).token_address == payment_token,
+                'Invalid token'
+            );
             assert(duration > 0, 'Duration must be non-zero');
             let existing_parking_lot = self.parking_lots.read(lot_id);
             assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exist');
@@ -341,7 +356,10 @@ pub mod Parking {
             assert(additional_hours > 0, 'Duration must be non-zero');
             let booking = self.bookings.read(booking_id);
             assert(booking.booking_id == booking_id, 'Booking ID does not exist');
-            assert(self.payment_token.read() == payment_token, 'Invalid token');
+            assert(
+                self.is_supported_payment_token(payment_token).token_address == payment_token,
+                'Invalid token'
+            );
             let caller = get_caller_address();
             assert(booking.payer == caller, 'Not driver owner');
             let existing_parking_lot = self.parking_lots.read(booking.lot_id);
@@ -392,14 +410,35 @@ pub mod Parking {
                 );
         }
 
+        // Add a new supported payment token
+        fn add_supported_token(
+            ref self: ContractState,
+            payment_token: ContractAddress,
+            pair_id: felt252,
+            pair_decimals: u8,
+            token_decimals: u8
+        ) {
+            self.pausable.assert_not_paused();
+            self.ownable.assert_only_owner();
+            assert(Zero::is_non_zero(@payment_token), 'Payment token address zero');
+            assert(Zero::is_non_zero(@pair_decimals), 'Pair decimals must be non-zero');
+            assert(Zero::is_non_zero(@token_decimals), 'Decimals must be non-zero');
+            let new_token = Pair {
+                token_address: payment_token, pair_id, pair_decimals, token_decimals
+            };
+            self.payment_tokens.write(payment_token, new_token);
+        }
+
         // Retrieves the total number of parking lots registered
         fn get_total_parking_lots(self: @ContractState) -> u256 {
             self.total_parking_lots.read()
         }
 
-        // Get a valid payment token
-        fn get_payment_token(self: @ContractState) -> ContractAddress {
-            self.payment_token.read()
+        // Checks if the given payment token is valid
+        fn is_supported_payment_token(
+            self: @ContractState, payment_token: ContractAddress
+        ) -> Pair {
+            self.payment_tokens.read(payment_token)
         }
 
         // Get parking lot by lot_id
@@ -448,21 +487,19 @@ pub mod Parking {
             payment_token: ContractAddress,
             duration: u32, // Duration in hours
         ) -> u256 {
-            assert(payment_token == self.payment_token.read(), 'Invalid token');
+            let token_support = self.is_supported_payment_token(payment_token);
+            assert(token_support.token_address == payment_token, 'Invalid token');
             assert(duration > 0, 'Duration must be non-zero');
 
             let existing_parking_lot = self.parking_lots.read(lot_id);
             assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exists');
-            let available_slot = self.available_slots.read(lot_id);
-            assert(available_slot > 0, 'Full slot');
-
             // Get asset price
-            let token_price = self.get_asset_price(6004514686061859652).into();
+            let token_price = self.get_asset_price(token_support.pair_id).into();
 
             // Calculate the amount of token needed
             let token_needed = (existing_parking_lot.hourly_rate_usd_cents.into()
-                * pow10_u256(8)
-                * pow10_u256(18))
+                * pow10_u256(token_support.pair_decimals.into())
+                * pow10_u256(token_support.token_decimals.into()))
                 / (token_price * 100);
 
             let amount: u256 = token_needed * duration.into();

@@ -182,7 +182,8 @@ pub mod Parking {
         ParkingBooked: ParkingBooked,
         ParkingExtended: ParkingExtended,
         ParkingEnded: ParkingEnded,
-        PenaltyImposed: PenaltyImposed
+        PenaltyImposed: PenaltyImposed,
+        PaymentTokenAdded: PaymentTokenAdded,
     }
 
     // Event for registering a parking lot
@@ -222,6 +223,13 @@ pub mod Parking {
         license_plate: felt252,
         lot_id: u256,
         penalty_amount: u64,
+        timestamp: u64,
+    }
+
+    // Event for new payment token
+    #[derive(Drop, starknet::Event)]
+    struct PaymentTokenAdded {
+        payment_token: ContractAddress,
         timestamp: u64,
     }
 
@@ -423,10 +431,12 @@ pub mod Parking {
             assert(Zero::is_non_zero(@payment_token), 'Payment token address zero');
             assert(Zero::is_non_zero(@pair_decimals), 'Pair decimals must be non-zero');
             assert(Zero::is_non_zero(@token_decimals), 'Decimals must be non-zero');
+            let timestamp = get_block_timestamp();
             let new_token = Pair {
                 token_address: payment_token, pair_id, pair_decimals, token_decimals
             };
             self.payment_tokens.write(payment_token, new_token);
+            self.emit(PaymentTokenAdded { payment_token, timestamp });
         }
 
         // Retrieves the total number of parking lots registered

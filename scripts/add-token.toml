@@ -1,0 +1,6 @@
+[[call]]
+call_type = "invoke"
+contract_address = "0x3458298921ad7e8ad26755c6fab793da8bf7bf1fc64d09c9961ff089018e16"
+function = "add_supported_token"
+inputs = ["0x4718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d", "6004514686061859652", "8", "18"]
+# inputs = ["0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7", "19514442401534788", "8", "18"]

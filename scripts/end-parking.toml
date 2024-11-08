@@ -1,0 +1,5 @@
+[[call]]
+call_type = "invoke"
+contract_address = "0x3458298921ad7e8ad26755c6fab793da8bf7bf1fc64d09c9961ff089018e16"
+function = "end_parking"
+inputs = ["0x626b5f393138393338313933383139793431333331333134"]

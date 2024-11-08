@@ -31,7 +31,6 @@ pub trait IParking<TContractState> {
     // Register a new parking lot
     fn register_parking_lot(
         ref self: TContractState,
-        lot_id: u256,
         name: felt252,
         location: felt252,
         coordinates: felt252,
@@ -67,7 +66,7 @@ pub trait IParking<TContractState> {
     );
 
     // Retrieves the total number of parking lots registered
-    fn get_total_parking_lots(self: @TContractState) -> u32;
+    fn get_total_parking_lots(self: @TContractState) -> u256;
 
     // Get a valid payment token
     fn get_payment_token(self: @TContractState) -> ContractAddress;
@@ -99,6 +98,7 @@ pub trait IParking<TContractState> {
 
 #[starknet::contract]
 pub mod Parking {
+    use super::IParking;
     use core::num::traits::Zero;
     use super::{ParkingLot, Booking};
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
@@ -140,7 +140,7 @@ pub mod Parking {
         license_plate_to_booking: Map::<felt252, felt252>, // License_plate to booking_id
         penalties: Map::<felt252, u64>, // Mapping from license_plate to penalty_amount
         payment_token: ContractAddress, // TODO: remove it
-        total_parking_lots: u32 // Count of total parking lots
+        total_parking_lots: u256 // Count of total parking lots
     }
 
     #[constructor]
@@ -229,7 +229,6 @@ pub mod Parking {
     impl ParkingImpl of super::IParking<ContractState> {
         fn register_parking_lot(
             ref self: ContractState,
-            lot_id: u256,
             name: felt252,
             location: felt252,
             coordinates: felt252,
@@ -238,14 +237,13 @@ pub mod Parking {
             wallet_address: ContractAddress
         ) {
             self.pausable.assert_not_paused();
-            let existing_parking_lot = self.parking_lots.read(lot_id);
-            assert(existing_parking_lot.lot_id != lot_id, 'lot_id already exists');
             assert(Zero::is_non_zero(@wallet_address), 'Wallet address zero');
             assert(slot_count > 0, 'Slot count must be non-zero');
             assert(hourly_rate_usd_cents > 0, 'Price must be non-zero');
             let creator = get_caller_address();
-            let registration_time = get_block_timestamp();
             let total_parking_lots = self.get_total_parking_lots();
+            let lot_id: u256 = total_parking_lots + 1;
+            let registration_time = get_block_timestamp();
             let new_parking_lot = ParkingLot {
                 lot_id,
                 name,
@@ -395,7 +393,7 @@ pub mod Parking {
         }
 
         // Retrieves the total number of parking lots registered
-        fn get_total_parking_lots(self: @ContractState) -> u32 {
+        fn get_total_parking_lots(self: @ContractState) -> u256 {
             self.total_parking_lots.read()
         }
 

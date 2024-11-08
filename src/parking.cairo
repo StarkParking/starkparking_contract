@@ -94,6 +94,14 @@ pub trait IParking<TContractState> {
     // Get available slots in a parking lot
     fn get_available_slots(self: @TContractState, lot_id: u256) -> u32;
 
+    // Retrieves the booking details for the specified booking ID.
+    fn get_booking(self: @TContractState, booking_id: felt252) -> Booking;
+
+    // Retrieves the booking ID of the latest booking associated with the given license plate.
+    fn get_latest_booking_by_license_plate(
+        self: @TContractState, license_plate: felt252
+    ) -> felt252;
+
     // Validate if the vehicle license plate is valid for the given lot
     fn validate_license_plate(self: @TContractState, lot_id: u256, license_plate: felt252) -> bool;
 
@@ -459,6 +467,18 @@ pub mod Parking {
         // Get available slots in a parking lot
         fn get_available_slots(self: @ContractState, lot_id: u256) -> u32 {
             self.available_slots.read(lot_id)
+        }
+
+        // Retrieves the booking details for the specified booking ID
+        fn get_booking(self: @ContractState, booking_id: felt252) -> Booking {
+            self.bookings.read(booking_id)
+        }
+
+        // Retrieves the booking ID of the latest booking associated with the given license plate
+        fn get_latest_booking_by_license_plate(
+            self: @ContractState, license_plate: felt252
+        ) -> felt252 {
+            self.license_plate_to_booking.read(license_plate)
         }
 
         // Validate if the vehicle license plate is valid for the given lot

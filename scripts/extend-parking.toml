@@ -2,10 +2,10 @@
 call_type = "invoke"
 contract_address = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d"
 function = "approve"
-inputs = ["0x7573b8bf44e29c68d5a535972ddf5bf5d17ebbbc4ed075ac602b7ebc5a57819", "4888931422592265441", "0x0"]
+inputs = ["0x0614d7b4cc2e63a4f325ae42be06cbcc0f709a3fc3396c316ea824cd6b169e36", "4888931422592265441", "0x0"]
 
 [[call]]
 call_type = "invoke"
-contract_address = "0x7573b8bf44e29c68d5a535972ddf5bf5d17ebbbc4ed075ac602b7ebc5a57819"
+contract_address = "0x0614d7b4cc2e63a4f325ae42be06cbcc0f709a3fc3396c316ea824cd6b169e36"
 function = "extend_parking"
 inputs = ["0x626b5f393138393338313933383139793431333331333134", "1", "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d"]

@@ -1,4 +1,4 @@
-sncast --profile katana \
+sncast --profile default \
 declare \
---fee-token eth \
+--fee-token strk \
 --contract-name Parking

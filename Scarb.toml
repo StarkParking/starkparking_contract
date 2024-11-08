@@ -23,3 +23,9 @@ sierra = true
 
 [scripts]
 test = "snforge test"
+
+[[tool.snforge.fork]]
+name = "KATANA"
+url = "http://127.0.0.1:5050"
+block_id.tag = "latest"
+

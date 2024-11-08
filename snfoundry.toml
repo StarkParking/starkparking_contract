@@ -3,7 +3,7 @@
 [sncast.katana]
 url = "http://127.0.0.1:5050"
 # accounts_file = "../account-file"
-account = "katana-1"
+account = "katana-test"
 # keystore = "~/keystore"
 wait_params = { timeout = 500, retry_interval = 10 }
 block_explorer = "Voyager"

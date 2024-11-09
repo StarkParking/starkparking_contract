@@ -206,8 +206,10 @@ pub mod Parking {
         booking_id: felt252,
         lot_id: u256,
         entry_time: u64,
+        expiration_time: u64,
         license_plate: felt252,
-        duration: u32
+        duration: u32,
+        total_payment: u64,
     }
 
     // Event for extending a parking booking
@@ -215,6 +217,8 @@ pub mod Parking {
     struct ParkingExtended {
         booking_id: felt252,
         additional_hours: u32,
+        total_payment: u64,
+        timestamp: u64
     }
 
     // Event for ending a parking session
@@ -231,7 +235,7 @@ pub mod Parking {
         license_plate: felt252,
         lot_id: u256,
         penalty_amount: u64,
-        timestamp: u64,
+        timestamp: u64
     }
 
     // Event for new payment token
@@ -335,7 +339,18 @@ pub mod Parking {
             self.available_slots.write(lot_id, available_slot - 1);
             self.license_plate_to_booking.write(license_plate, booking_id);
             erc20.transferFrom(payer, existing_parking_lot.wallet_address, amount.into());
-            self.emit(ParkingBooked { booking_id, lot_id, entry_time, license_plate, duration });
+            self
+                .emit(
+                    ParkingBooked {
+                        booking_id,
+                        lot_id,
+                        entry_time,
+                        expiration_time,
+                        license_plate,
+                        duration,
+                        total_payment
+                    }
+                );
         }
 
         // End a parking session
@@ -391,6 +406,7 @@ pub mod Parking {
             let erc20 = IERC20Dispatcher { contract_address: payment_token };
             let total_payment: u64 = booking.total_payment
                 + (existing_parking_lot.hourly_rate_usd_cents * additional_hours).into();
+            let timestamp = get_block_timestamp();
 
             let extend_booking = Booking {
                 license_plate: booking.license_plate,
@@ -404,7 +420,7 @@ pub mod Parking {
             };
             self.bookings.write(booking_id, extend_booking);
             erc20.transferFrom(payer, existing_parking_lot.wallet_address, amount.into());
-            self.emit(ParkingExtended { booking_id, additional_hours });
+            self.emit(ParkingExtended { booking_id, additional_hours, total_payment, timestamp });
         }
 
         // Impose a penalty on a license plate for invalid parking

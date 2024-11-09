@@ -308,6 +308,7 @@ pub mod Parking {
                 'Invalid token'
             );
             assert(duration > 0, 'Duration must be non-zero');
+            assert(self.bookings.read(booking_id).booking_id == 0, 'Booking ID already exists');
             let existing_parking_lot = self.parking_lots.read(lot_id);
             assert(existing_parking_lot.lot_id == lot_id, 'Parking lot does not exist');
             assert(
@@ -395,6 +396,7 @@ pub mod Parking {
             assert(booking.payer == caller, 'Not driver owner');
             let existing_parking_lot = self.parking_lots.read(booking.lot_id);
             assert(existing_parking_lot.lot_id == booking.lot_id, 'Parking lot does not exist');
+            assert(booking.exit_time == 0, 'Booking already ended');
 
             let amount = self
                 .get_oracle_token_quote(

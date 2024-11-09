@@ -359,6 +359,7 @@ pub mod Parking {
             self.pausable.assert_not_paused();
             let booking = self.bookings.read(booking_id);
             assert(booking.booking_id == booking_id, 'Booking id does not exist');
+            assert(booking.exit_time == 0, 'Booking already ended');
             let caller = get_caller_address();
             assert(booking.payer == caller, 'Not driver owner');
             // TODO: add pay if over time
